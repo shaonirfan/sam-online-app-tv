@@ -25,6 +25,8 @@ git clone https://github.com/shaonirfan/sam-online-app-tv && cd sam-online-app-t
 ./run_test.sh 192.168.1.221                  # latest GitHub release, full test (~4 min)
 ./run_test.sh 192.168.1.221 --apk my.apk     # a local build instead
 ./run_test.sh 192.168.1.221 --no-install     # test what's already installed
+./run_test.sh 192.168.1.221 --cold           # clear app data first (fresh-install timing;
+                                             # wipes My List / watch progress on the TV)
 ./run_test.sh 192.168.1.221 --push           # also publish the report + screenshots (see below)
 ```
 
@@ -33,18 +35,35 @@ or ffmpeg also work. Without any of them, the original PNGs are pushed.
 
 Results go to `results/<timestamp>/` (also packed as `results/<timestamp>.tar.gz`):
 
-- `summary.txt`: one PASS / FAIL / INFO line per check. It covers connection, BDIX reachability,
-  install, the installed version, whether the app survived the run, crashes, ANRs, player errors,
-  the video decoder used, and whether key screens show content.
-- `NN_*.png`: TV screenshots in order. These cover Home, title page, player, back navigation, search
-  "friends" and the "fri" suggestions, Categories → TV & Web Series → a letter group → a series page.
+- `summary.txt`: one PASS / WARN / FAIL / INFO line per check (details below).
+- `testlog.txt`: the app's test markers (what each screen reported when it became ready).
+- `NN_*.png`: TV screenshots of each step.
 - `logcat.txt`, `crash.txt`, `app_errors.txt`, `01_device_info.txt`, `01_ping.txt`, `02_install.txt`.
+
+### How the session works
+
+The script doesn't press keys blindly. It opens each screen through the app's test entry point
+(`am start ... --es open <target>`). It then waits until the app logs that the screen is ready (tag
+`SamTvTest`), and checks the facts in that log line:
+
+| Step | Entry point | Checks |
+|---|---|---|
+| Home (cold start) | app launch | time to first row (WARN if > 30 s), at least 7/9 rows loaded |
+| Movie page | `title:imdb250:0` | no "089." rank prefix, file size in MB/GB |
+| Series page | `title:series:0` | opens as a series, seasons and episodes listed |
+| Categories | `category:series`, then OK | grid opens, first group opens |
+| Search | `search:friends`, `search:fri` | *Friends* (TV) is the first result; "fri" has suggestions |
+| Player | `play:imdb250:0`, then ▶▶▶ | player ready, position advancing, seek moves forward |
+
+It finishes with crash, ANR and player-error checks. Other entry points: `home`, `category:<id>`,
+`title:<id>:<n>`, `play:<id>:<n>`, `search:<text>`. Category ids: english, english1080, imdb250,
+hindi, south, series, anime, korean, animation.
 
 Exit code: `0` = all checks passed, `1` = a check failed, `2` = couldn't connect, download or install.
 
 Note: player screenshots are often black even while video plays. Many TV chips (Amlogic, for example)
-draw video on a hardware layer that `screencap` can't capture. Use the decoder line in `summary.txt`
-and the absence of player errors instead.
+draw video on a hardware layer that `screencap` can't capture. Playback is checked from the app's
+position markers instead.
 
 ## Publishing reports (`--push`)
 
@@ -59,8 +78,8 @@ The branch's `README.md` lists every run, newest first, with version and result:
 https://github.com/shaonirfan/sam-online-app-tv/tree/test-reports
 
 The script uses a separate git worktree (`.test-reports/`, ignored by git), so your checkout of `main` is
-never touched. The machine needs push access to the repo (an SSH key, or an HTTPS token in git's
-credential helper).
+never touched. The machine needs push access to the repo (an SSH key or deploy key, or an HTTPS token
+in git's credential helper). If git has no user name/email set, it commits as "SAM TV test bot".
 
 ## Driving the TV by hand
 

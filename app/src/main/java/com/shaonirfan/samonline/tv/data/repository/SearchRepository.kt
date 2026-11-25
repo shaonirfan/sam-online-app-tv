@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -53,8 +54,13 @@ class SearchRepository(
     )
 
     /** Loads the cached index and refreshes it in the background when stale/missing. */
-    fun warmUp() {
+    /**
+     * At app start the index build waits [delayMs] so the Home rows get the network first
+     * (opening Search calls this with no delay).
+     */
+    fun warmUp(delayMs: Long = 0L) {
         scope.launch {
+            if (delayMs > 0) kotlinx.coroutines.delay(delayMs)
             ensureLoaded()
             val age = System.currentTimeMillis() - _state.value.builtAt
             if (!_state.value.ready || age > 24L * 60 * 60 * 1000) rebuild()
@@ -105,11 +111,15 @@ class SearchRepository(
                 persist(result)
             }
             _state.value = IndexState(ready = entries.isNotEmpty(), building = false, count = entries.size, builtAt = System.currentTimeMillis())
+            com.shaonirfan.samonline.tv.TestLog.mark("index_ready", "titles" to entries.size)
         }
     }
 
+    /** The crawl uses at most 3 of the scraper's 8 connections so browsing stays fast meanwhile. */
+    private val crawlPermits = kotlinx.coroutines.sync.Semaphore(3)
+
     private suspend fun crawl(category: Category, url: String, depth: Int, out: MutableList<SearchIndexEntry>) {
-        val listing = DirectoryScraper.list(url, 15_000).getOrNull() ?: return
+        val listing = crawlPermits.withPermit { DirectoryScraper.list(url, 15_000).getOrNull() } ?: return
         val children = mutableListOf<String>()
         for (e in listing) {
             when {

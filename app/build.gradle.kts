@@ -12,8 +12,8 @@ android {
         applicationId = "com.shaonirfan.samonline.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
     }
 
     // Release signing is optional: it is only configured when the keystore and
@@ -23,6 +23,15 @@ android {
     val hasReleaseKey = keystoreFile.exists() && !System.getenv("KEYSTORE_PASSWORD").isNullOrBlank()
 
     signingConfigs {
+        // A fixed debug key checked into the repo, so every CI build is signed the same way
+        // and updates install over the previous version (keeping My List / watch progress).
+        // It is NOT a secret; use the release keystore secrets for Play-quality signing.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (hasReleaseKey) {
             create("release") {
                 storeFile = keystoreFile

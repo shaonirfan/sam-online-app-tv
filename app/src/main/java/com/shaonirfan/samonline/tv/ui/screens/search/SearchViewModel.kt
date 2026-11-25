@@ -3,6 +3,8 @@ package com.shaonirfan.samonline.tv.ui.screens.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shaonirfan.samonline.tv.AppContainer
+import com.shaonirfan.samonline.tv.TestHooks
+import com.shaonirfan.samonline.tv.TestLog
 import com.shaonirfan.samonline.tv.data.model.MediaItem
 import com.shaonirfan.samonline.tv.data.repository.IndexState
 import kotlinx.coroutines.FlowPreview
@@ -61,13 +63,22 @@ class SearchViewModel(private val container: AppContainer) : ViewModel() {
                 SearchResults()
             } else {
                 val items = container.search.search(q)
-                SearchResults(q, items, container.search.suggestions(q, items))
+                SearchResults(q, items, container.search.suggestions(q, items)).also { r ->
+                    TestLog.mark(
+                        "search", "q" to q, "count" to items.size,
+                        "movies" to r.count(SearchFilter.MOVIES), "series" to r.count(SearchFilter.SERIES),
+                        "first" to items.take(3).joinToString("|") { it.displayTitle + "/" + (if (it.isSeries) "tv" else "movie") },
+                        "suggestions" to r.suggestions.take(4).joinToString("|"),
+                        "indexed" to indexState.value.count,
+                    )
+                }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchResults())
 
     init {
         container.search.warmUp()
+        TestHooks.pendingSearch?.let { _query.value = it; TestHooks.pendingSearch = null }
     }
 
     fun type(c: Char) {

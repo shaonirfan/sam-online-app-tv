@@ -13,14 +13,13 @@
    - The link the script prints after "Published:". That `REPORT.md` shows the summary and every
      screenshot.
    - The full contents of `results/<timestamp>/summary.txt` and the installed version.
-   - What these screenshots show: `03_home_35s`, `07_title_page`, `16_search_friends`,
-     `17_search_fri_suggestions`, `22_series_page`.
-   - Expected in v1.0.2:
-     - Titles have no "089." prefix.
-     - The title page opens with the title visible, and sizes show in MB/GB (not KB).
-     - Searching "friends" lists the *Friends* series first.
-     - Typing "fri" shows a suggestions row (Friends, Friends with Benefits, ...).
-     - Search results have All / Movies / TV Shows filter chips.
+   - What these screenshots show: `02_home_ready`, `03_title_page`, `04_series_page`,
+     `05_series_episodes`, `08_search_friends`, `09_search_fri`, `12_player_controls`.
+     Check that the title page shows the title at the top (not scrolled away).
+   - The script now checks these itself (v1.0.3+): no rank prefix, MB/GB sizes, the series page with
+     episodes, *Friends* first, "fri" suggestions, and playback + seek. Report any WARN/FAIL lines.
+   - Updates should now install over the previous version. This is the last time a clean reinstall
+     (signature change) is expected.
    - Any FAIL line, plus the matching lines from `app_errors.txt` / `crash.txt`.
 5. Keep `results/<timestamp>.tar.gz` so it can be shared for debugging.
 

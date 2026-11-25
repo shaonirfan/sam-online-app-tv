@@ -18,7 +18,7 @@ class SamOnlineApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        container.search.warmUp()
+        container.search.warmUp(delayMs = 60_000)
     }
 
     /** Coil with a 25% memory cache and a 512 MB disk cache for posters/backdrops. */

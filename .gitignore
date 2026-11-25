@@ -10,3 +10,4 @@ captures/
 *.keystore
 .kotlin/
 .test-reports/
+!app/debug.keystore

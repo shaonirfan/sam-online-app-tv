@@ -21,6 +21,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.shaonirfan.samonline.tv.AppContainer
+import com.shaonirfan.samonline.tv.TestLog
 import com.shaonirfan.samonline.tv.data.model.WatchProgress
 import com.shaonirfan.samonline.tv.data.remote.SubtitleFinder
 import kotlinx.coroutines.CoroutineScope
@@ -104,7 +105,10 @@ class PlayerController(
 
         override fun onPlaybackStateChanged(state: Int) {
             isBuffering = state == Player.STATE_BUFFERING
-            if (state == Player.STATE_READY) durationMs = player.duration.coerceAtLeast(0L)
+            if (state == Player.STATE_READY) {
+                durationMs = player.duration.coerceAtLeast(0L)
+                TestLog.mark("player_ready", "title" to current?.title, "duration_s" to durationMs / 1000, "pos_s" to player.currentPosition / 1000)
+            }
             if (state == Player.STATE_ENDED) {
                 ended = true
                 saveProgress(finished = true)
@@ -118,6 +122,7 @@ class PlayerController(
         }
 
         override fun onPlayerError(e: PlaybackException) {
+            TestLog.mark("player_error", "code" to e.errorCodeName)
             error = when (e.errorCode) {
                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "Can't reach the server. Check your SAM Online connection."
@@ -147,6 +152,7 @@ class PlayerController(
                 if (player.duration > 0) durationMs = player.duration
                 if (++sinceSave >= 10) { // every ~5 s
                     sinceSave = 0
+                    TestLog.mark("player_tick", "pos_s" to positionMs / 1000, "playing" to player.isPlaying, "buffered_s" to bufferedMs / 1000)
                     if (player.isPlaying) saveProgress()
                 }
                 delay(500)

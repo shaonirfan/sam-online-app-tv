@@ -6,6 +6,8 @@
 #   ./run_test.sh 192.168.1.221                 # install latest GitHub release, run the full test
 #   ./run_test.sh 192.168.1.221 --apk app.apk   # install a local APK instead
 #   ./run_test.sh 192.168.1.221 --no-install    # test what is already installed
+#   ./run_test.sh 192.168.1.221 --cold          # clear app data first (measures a fresh start;
+#                                               # wipes My List / watch progress on the TV)
 #   ./run_test.sh 192.168.1.221 --push          # also publish report + screenshots to the
 #                                               # 'test-reports' branch (needs git push access)
 #   TV_IP=192.168.1.221 ./run_test.sh
@@ -24,17 +26,19 @@ TV_IP="${TV_IP:-}"
 APK=""
 INSTALL=1
 PUSH=0
+COLD=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --apk) APK="$2"; shift 2 ;;
     --no-install) INSTALL=0; shift ;;
     --push) PUSH=1; shift ;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    --cold) COLD=1; shift ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     *) TV_IP="$1"; shift ;;
   esac
 done
 if [ -z "$TV_IP" ]; then
-  echo "Usage: $0 <tv-ip> [--apk file.apk] [--no-install] [--push]"; exit 2
+  echo "Usage: $0 <tv-ip> [--apk file.apk] [--no-install] [--cold] [--push]"; exit 2
 fi
 DEV="${TV_IP}:5555"
 
@@ -110,42 +114,126 @@ info "installed version: ${VERSION:-unknown}"
 
 # ---------------------------------------------------------------- helpers
 key()  { A shell input keyevent "KEYCODE_$1"; sleep 0.4; }
-wait_s() { sleep "$1"; }
-shot() { A exec-out screencap -p > "$OUT/$1.png"; log "  screenshot $1 ($(wc -c < "$OUT/$1.png") bytes)"; }
+shot() { sleep "${2:-0}"; A exec-out screencap -p > "$OUT/$1.png"; log "  screenshot $1"; }
 alive() { [ -n "$(A shell pidof $PKG | tr -d '\r')" ]; }
+warn() { echo "WARN  $*" | tee -a "$SUMMARY"; }
 
-# ---------------------------------------------------------------- scripted session
+# The app logs one-line "ready" markers under the SamTvTest tag (see app/.../TestHooks.kt).
+marks() { A logcat -d -s SamTvTest:I -v raw 2>/dev/null | tr -d '\r' | grep -v '^-----'; }
+MARK_BASE=0
+# open_target <target>: open a screen through the app's test entry point (--es open ...).
+open_target() {
+  MARK_BASE=$(marks | wc -l)
+  A shell am start -n "$ACTIVITY" --es open "$1" > /dev/null 2>&1
+  log "open $1"
+}
+# wait_mark <regex> <timeout-s>: wait for a NEW marker line matching regex; prints it.
+wait_mark() {
+  local re="$1" to="$2" line i
+  for i in $(seq 1 "$to"); do
+    line="$(marks | tail -n +$((MARK_BASE + 1)) | grep -E "$re" | tail -1)"
+    if [ -n "$line" ]; then echo "$line"; return 0; fi
+    sleep 1
+  done
+  return 1
+}
+# field <line> <name>: value of name=... in a marker line
+field() { echo "$1" | grep -oE "(^| )$2=[^ ]*" | head -1 | cut -d= -f2-; }
+
+# ---------------------------------------------------------------- session
 A logcat -G 16M >/dev/null 2>&1
-A logcat -c
 A shell am force-stop "$PKG"
+if [ "$COLD" = 1 ]; then log "--cold: clearing app data (My List / progress / caches)"; A shell pm clear "$PKG" >/dev/null; fi
+A logcat -c
+MARK_BASE=0
 A shell am start -W -n "$ACTIVITY" > "$OUT/03_launch.txt" 2>&1
-log "App launched - running the remote-control sequence (~4 min). Don't touch the remote."
+log "App launched - running the test session (~5-8 min). Don't touch the remote."
 
-wait_s 10; shot 01_home_10s
-wait_s 10; shot 02_home_20s
-wait_s 15; shot 03_home_35s
-key DPAD_DOWN; wait_s 2; shot 04_row1
-key DPAD_DOWN; wait_s 2; shot 05_row2
-key DPAD_RIGHT; key DPAD_RIGHT; wait_s 2; shot 06_row2_right
-key DPAD_CENTER; wait_s 10; shot 07_title_page
-key DPAD_CENTER; wait_s 15; shot 08_player
-wait_s 7; shot 09_player_controls_hidden
-key DPAD_RIGHT; wait_s 1; shot 10_seek_right
-wait_s 4; key DPAD_UP; wait_s 1; shot 11_controls
-key BACK; wait_s 2; key BACK; wait_s 4; shot 12_back_on_title
-key BACK; wait_s 4; shot 13_back_home_focus
-key DPAD_LEFT; key DPAD_LEFT; key DPAD_LEFT; wait_s 2; shot 14_rail
-key DPAD_UP; wait_s 1; key DPAD_CENTER; wait_s 4; shot 15_search
-A shell input text "friends"; wait_s 8; shot 16_search_friends
-key DEL; key DEL; key DEL; key DEL; wait_s 5; shot 17_search_fri_suggestions
-key BACK; wait_s 3; key DPAD_LEFT; key DPAD_LEFT; wait_s 1
-key DPAD_DOWN; key DPAD_DOWN; wait_s 1; key DPAD_CENTER; wait_s 4; shot 18_categories
-key DPAD_DOWN; key DPAD_RIGHT; key DPAD_RIGHT; wait_s 1; shot 19_categories_focus
-key DPAD_CENTER; wait_s 12; shot 20_category_grid
-key DPAD_CENTER; wait_s 10; shot 21_group_grid
-key DPAD_CENTER; wait_s 10; shot 22_series_page
+# 1. Home: time to first row and to all rows
+if m=$(wait_mark '^home_row ' 120); then
+  t=$(( $(field "$m" t) / 1000 ))
+  if [ "$t" -le 30 ]; then pass "home: first row after ${t}s"; else warn "home: first row only after ${t}s"; fi
+  shot 01_home_first_row 2
+else fail "home: no row loaded within 120s"; shot 01_home_first_row; fi
+if m=$(wait_mark '^home_ready ' 240); then
+  t=$(( $(field "$m" t) / 1000 )); rows=$(field "$m" rows)
+  if [ "${rows:-0}" -ge 7 ]; then pass "home: $rows/9 rows loaded after ${t}s"; else fail "home: only $rows/9 rows loaded (${t}s)"; fi
+else fail "home: rows still loading after 240s"; fi
+shot 02_home_ready 3
+
+# 2. Movie title page (first IMDb Top 250 title)
+open_target title:imdb250:0
+if m=$(wait_mark '^details ' 40); then
+  title=$(field "$m" title); size=$(field "$m" size)
+  info "title page: $title, size $size"
+  if echo "$title" | grep -qE '^[0-9]{1,3}[._)-]'; then fail "title still has a rank prefix: $title"; else pass "title has no rank prefix ($title)"; fi
+  case "$size" in *MB|*GB) pass "file size shown in MB/GB ($size)";; *KB) fail "file size still in KB ($size)";; *) info "no file size on this server listing";; esac
+  shot 03_title_page 3
+else fail "title page did not open"; shot 03_title_page; fi
+
+# 3. Series page (first title of the TV & Web Series row) + its episodes
+open_target title:series:0
+if m=$(wait_mark '^details ' 40); then
+  title=$(field "$m" title); seasons=$(field "$m" seasons); files=$(field "$m" files)
+  if [ "$(field "$m" series)" = "true" ]; then pass "series page: $title ($seasons seasons, $files files)"; else fail "series row title opened as a movie: $title"; fi
+  if [ "${seasons:-0}" -gt 0 ]; then
+    if e=$(wait_mark '^episodes ' 30); then
+      n=$(field "$e" count); es=$(field "$e" size)
+      if [ "${n:-0}" -gt 0 ]; then pass "episodes listed: $n in $(field "$e" season) (first: $(field "$e" first), $es)"; else fail "season has no episodes"; fi
+    else fail "episodes did not load"; fi
+  fi
+  shot 04_series_page 3
+  key DPAD_DOWN; key DPAD_DOWN; key DPAD_DOWN; shot 05_series_episodes 2
+else fail "series page did not open"; shot 04_series_page; fi
+
+# 4. Category grid -> first letter group
+open_target category:series
+if m=$(wait_mark '^grid ' 40); then
+  pass "category grid: $(field "$m" items) folders"
+  shot 06_category_grid 3
+  MARK_BASE=$(marks | wc -l); key DPAD_CENTER
+  if m=$(wait_mark '^(grid|details) ' 40); then pass "opened $(field "$m" title) ($(echo "$m" | cut -d' ' -f1), $(field "$m" items)$(field "$m" seasons) entries)"; else fail "first group did not open"; fi
+  shot 07_group 3
+else fail "category grid did not open"; shot 06_category_grid; fi
+
+# 5. Search "friends" (first run builds the index: results improve as it grows)
+open_target search:friends
+if m=$(wait_mark '^search t=[0-9]+ q=friends .*first=Friends/tv' 300) || m=$(wait_mark '^search t=[0-9]+ q=friends ' 5); then
+  first=$(field "$m" first); info "search friends: $(field "$m" count) results (movies $(field "$m" movies), tv $(field "$m" series)), $(field "$m" indexed) titles indexed"
+  case "$first" in Friends/tv*) pass "\"friends\" lists the Friends series first";; *) fail "\"friends\" first results: $first";; esac
+else fail "search produced no results for friends"; fi
+shot 08_search_friends 3
+
+open_target search:fri
+if m=$(wait_mark '^search t=[0-9]+ q=fri ' 60); then
+  sug=$(field "$m" suggestions)
+  if [ -n "$sug" ]; then pass "suggestions for \"fri\": $sug"; else fail "no suggestions for \"fri\""; fi
+else fail "search for fri did not run"; fi
+shot 09_search_fri 3
+
+# 6. Playback: start, keep playing, seek
+open_target play:imdb250:0
+if m=$(wait_mark '^player_ready ' 60); then
+  pass "player ready: $(field "$m" title), $(( $(field "$m" duration_s) / 60 )) min, starting at $(field "$m" pos_s)s"
+  shot 10_player 3
+  p1=$(field "$(wait_mark '^player_tick .*playing=true' 30)" pos_s)
+  MARK_BASE=$(marks | wc -l)
+  key DPAD_RIGHT; key DPAD_RIGHT; key DPAD_RIGHT
+  shot 11_player_seek 1
+  sleep 6
+  p2=$(field "$(wait_mark '^player_tick ' 20)" pos_s)
+  if [ -n "$p1" ] && [ -n "$p2" ] && [ "$p2" -ge $((p1 + 20)) ]; then pass "playing and seeking (${p1}s -> ${p2}s after 3x forward)"
+  elif [ -n "$p2" ] && [ -n "$p1" ] && [ "$p2" -gt "$p1" ]; then warn "playing, but seek moved less than expected (${p1}s -> ${p2}s)"
+  else fail "playback not progressing (${p1:-?}s -> ${p2:-?}s)"; fi
+  key DPAD_UP; shot 12_player_controls 1
+  key BACK; key BACK; shot 13_after_player 3
+else
+  m2=$(marks | grep '^player_error' | tail -1)
+  fail "player did not start ${m2:+($m2)}"; shot 10_player
+fi
 
 # ---------------------------------------------------------------- logs + checks
+marks > "$OUT/testlog.txt"
 A logcat -d -v threadtime > "$OUT/logcat.txt" 2>&1
 A logcat -b crash -d -v threadtime > "$OUT/crash.txt" 2>&1
 A shell dumpsys activity top > "$OUT/activity_top.txt" 2>&1
@@ -160,18 +248,10 @@ if [ -n "$PID" ]; then
   n="$(wc -l < "$OUT/app_errors.txt")"; if [ "$n" -gt 0 ]; then fail "$n player/runtime error lines (app_errors.txt)"; else pass "no player/runtime errors"; fi
   grep " $PID " "$OUT/logcat.txt" | grep -m1 -oE "MediaCodec: \[[^]]+\]" | head -1 | sed 's/^/INFO  video decoder: /' >> "$SUMMARY" || true
 fi
-
-# Screens that should show real content (posters) are big PNGs; near-empty ones are tiny.
-# (The player screens are excluded: many TV chips draw video on a layer screencap can't see.)
-for s in 03_home_35s 07_title_page 16_search_friends 20_category_grid 22_series_page; do
-  f="$OUT/$s.png"
-  if [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 150000 ]; then pass "screen $s has content"; else fail "screen $s looks empty ($(wc -c < "$f" 2>/dev/null || echo 0) bytes)"; fi
-done
-
 {
   echo
-  echo "Screens to eyeball: 03 home, 07 title page (title visible, sizes in MB/GB), 16 'friends' (Friends series first),"
-  echo "17 'fri' suggestions row, 22 series page (seasons + episodes)."
+  echo "Note: player screenshots are often black - this TV draws video on a layer screencap can't see."
+  echo "Playback is verified from the app's position markers instead (testlog.txt)."
 } >> "$SUMMARY"
 
 tar -czf "results/$STAMP.tar.gz" -C results "$STAMP"
@@ -209,7 +289,7 @@ publish() {
   dest="$wt/reports/$STAMP"
   mkdir -p "$dest"
   for f in "$OUT"/*.png; do to_jpg "$f" "$dest/$(basename "${f%.png}").jpg"; done
-  cp "$SUMMARY" "$OUT/01_device_info.txt" "$OUT/02_install.txt" "$dest/" 2>/dev/null
+  cp "$SUMMARY" "$OUT/01_device_info.txt" "$OUT/02_install.txt" "$OUT/testlog.txt" "$dest/" 2>/dev/null
   cp "$OUT/crash.txt" "$OUT/app_errors.txt" "$dest/" 2>/dev/null
   gzip -c "$OUT/logcat.txt" > "$dest/logcat.txt.gz"
 
@@ -224,7 +304,7 @@ publish() {
     cat "$SUMMARY"
     echo '```'
     echo
-    echo "Files: [summary.txt](summary.txt) · [logcat.txt.gz](logcat.txt.gz) · [crash.txt](crash.txt) · [app_errors.txt](app_errors.txt)"
+    echo "Files: [summary.txt](summary.txt) · [testlog.txt](testlog.txt) · [logcat.txt.gz](logcat.txt.gz) · [crash.txt](crash.txt) · [app_errors.txt](app_errors.txt)"
     echo
     echo "## Screenshots"
     for img in $(cd "$dest" && ls *.jpg *.png 2>/dev/null | sort); do
@@ -247,8 +327,11 @@ publish() {
     done
   } > "$wt/README.md"
 
+  # Machines without a git identity (e.g. a fresh Pi) commit as a bot.
+  local ident=()
+  [ -n "$(git -C "$wt" config user.email)" ] || ident=(-c "user.name=SAM TV test bot" -c "user.email=tv-test-bot@users.noreply.github.com")
   (cd "$wt" && git add -A && \
-    git commit -q -m "TV test $STAMP: v${VERSION:-?} - $([ "$FAILS" -eq 0 ] && echo "all passed" || echo "$FAILS failed")" && \
+    git "${ident[@]}" commit -q -m "TV test $STAMP: v${VERSION:-?} - $([ "$FAILS" -eq 0 ] && echo "all passed" || echo "$FAILS failed")" && \
     git push -q -u origin test-reports) || return 1
   local url
   url="$(git -C "$root" remote get-url origin | sed -e 's#git@github.com:#https://github.com/#' -e 's#\.git$##')"

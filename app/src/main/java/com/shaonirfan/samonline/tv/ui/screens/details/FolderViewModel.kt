@@ -3,6 +3,8 @@ package com.shaonirfan.samonline.tv.ui.screens.details
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shaonirfan.samonline.tv.AppContainer
+import com.shaonirfan.samonline.tv.TestLog
+import com.shaonirfan.samonline.tv.data.model.NameCleaner
 import com.shaonirfan.samonline.tv.data.download.EnqueueResult
 import com.shaonirfan.samonline.tv.data.model.Episode
 import com.shaonirfan.samonline.tv.data.model.FolderContent
@@ -63,7 +65,10 @@ class FolderViewModel(
                 .onFailure { _state.value = FolderUiState.Error(it.localizedMessage ?: "Couldn't open this folder") }
                 .onSuccess { content ->
                     when (content) {
-                        is FolderContent.Grid -> _state.value = FolderUiState.Grid(content.items)
+                        is FolderContent.Grid -> {
+                            _state.value = FolderUiState.Grid(content.items)
+                            TestLog.mark("grid", "title" to NameCleaner.displayTitle(title), "items" to content.items.size)
+                        }
                         is FolderContent.Title -> {
                             // Start on the season of the last watched episode, if any.
                             val last = container.library.lastWatchedUnder(DirectoryScraper.folderUrl(url))
@@ -71,6 +76,11 @@ class FolderViewModel(
                                 content.seasons.indexOfFirst { last.url.startsWith(DirectoryScraper.folderUrl(it.url)) }.coerceAtLeast(0)
                             } else 0
                             _state.value = FolderUiState.Details(content, seasonIndex, episodes = content.files)
+                            TestLog.mark(
+                                "details", "title" to content.item.displayTitle, "series" to content.isSeries,
+                                "seasons" to content.seasons.size, "files" to content.files.size,
+                                "size" to content.files.firstOrNull()?.sizeLabel?.ifBlank { "-" },
+                            )
                             if (content.seasons.isNotEmpty()) selectSeason(seasonIndex)
                             loadRelated()
                         }
@@ -87,6 +97,8 @@ class FolderViewModel(
         seasonJob = viewModelScope.launch {
             val eps = container.catalog.episodes(season).getOrDefault(emptyList())
             _state.update { (it as? FolderUiState.Details)?.copy(episodes = eps, episodesLoading = false) ?: it }
+            TestLog.mark("episodes", "season" to season.name, "count" to eps.size, "first" to eps.firstOrNull()?.title,
+                "size" to eps.firstOrNull()?.sizeLabel?.ifBlank { "-" })
         }
     }
 

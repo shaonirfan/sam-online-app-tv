@@ -120,7 +120,7 @@ class CatalogRepository(
         val prioritized = top.filter { it.isFolder }
             .sortedWith(compareByDescending<RemoteEntry> { leadingYearRegex.containsMatchIn(it.name.trim()) }
                 .thenByDescending { freshness(it) })
-            .take(12)
+            .take(8)
 
         val perFolder = prioritized.map { folder -> async { scanTopFolder(category, folder, limit) } }.awaitAll()
         val seen = HashSet<String>()
@@ -145,7 +145,7 @@ class CatalogRepository(
         if (inside.any { it.isVideo } || (category.isSeries && hasSeasonStructure(inside))) {
             return@coroutineScope listOf(Candidate(folder.url, folder.name, DirectoryScraper.pickPoster(inside), freshness(folder, insideMax)))
         }
-        val children = inside.filter { it.isFolder }.sortedByDescending { freshness(it) }.take(minOf(limit, 10))
+        val children = inside.filter { it.isFolder }.sortedByDescending { freshness(it) }.take(minOf(limit, 8))
         children.map { child ->
             async {
                 val childItems = DirectoryScraper.list(child.url, 13_000).getOrNull().orEmpty()
@@ -156,7 +156,7 @@ class CatalogRepository(
                 }
                 // One more level: group -> title -> (season | files)
                 val out = mutableListOf<Candidate>()
-                for (deep in childItems.filter { it.isFolder }.sortedByDescending { freshness(it) }.take(6)) {
+                for (deep in childItems.filter { it.isFolder }.sortedByDescending { freshness(it) }.take(4)) {
                     val deepItems = DirectoryScraper.list(deep.url, 12_000).getOrNull().orEmpty()
                     if (deepItems.none { it.isVideo }) continue
                     val deepPoster = DirectoryScraper.pickPoster(deepItems) ?: childPoster

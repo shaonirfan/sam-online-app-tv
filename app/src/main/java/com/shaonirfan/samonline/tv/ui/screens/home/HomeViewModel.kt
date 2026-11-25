@@ -3,6 +3,7 @@ package com.shaonirfan.samonline.tv.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shaonirfan.samonline.tv.AppContainer
+import com.shaonirfan.samonline.tv.TestLog
 import com.shaonirfan.samonline.tv.data.model.Category
 import com.shaonirfan.samonline.tv.data.model.MediaItem
 import com.shaonirfan.samonline.tv.data.model.NameCleaner
@@ -72,6 +73,12 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
                     })
                 }
                 buildHeroIfNeeded()
+                val s = _state.value
+                TestLog.mark("home_row", "id" to category.id, "items" to items.size,
+                    "loaded" to s.rows.count { it.items.isNotEmpty() }, "of" to s.rows.size)
+                if (s.rows.none { it.loading }) {
+                    TestLog.mark("home_ready", "rows" to s.rows.count { it.items.isNotEmpty() }, "hero" to s.hero.size)
+                }
             }
         }
     }
