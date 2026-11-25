@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SAM Online TV</string>
+    <string name="voice_search_prompt">Say a movie or series name</string>
+</resources>

@@ -1,0 +1,62 @@
+package com.shaonirfan.samonline.tv.ui.screens.search
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.shaonirfan.samonline.tv.AppContainer
+import com.shaonirfan.samonline.tv.data.model.MediaItem
+import com.shaonirfan.samonline.tv.data.repository.IndexState
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.stateIn
+
+data class SearchResults(val query: String = "", val items: List<MediaItem> = emptyList(), val searching: Boolean = false)
+
+@OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+class SearchViewModel(private val container: AppContainer) : ViewModel() {
+
+    private val _query = MutableStateFlow("")
+    val query: StateFlow<String> = _query.asStateFlow()
+
+    val indexState: StateFlow<IndexState> = container.search.state
+
+    /**
+     * Debounced search over the local index. While the very first index is still being
+     * built, results refresh as more titles arrive (every 500 new entries).
+     */
+    val results: StateFlow<SearchResults> = combine(
+        _query.debounce(220).distinctUntilChanged(),
+        indexState.map { it.count / 500 to it.ready }.distinctUntilChanged(),
+    ) { q, _ -> q }
+        .mapLatest { q ->
+            if (q.isBlank()) SearchResults() else SearchResults(q, container.search.search(q))
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchResults())
+
+    init {
+        container.search.warmUp()
+    }
+
+    fun type(c: Char) {
+        if (_query.value.length < 60) _query.value += c
+    }
+
+    fun backspace() {
+        _query.value = _query.value.dropLast(1)
+    }
+
+    fun clear() {
+        _query.value = ""
+    }
+
+    fun set(text: String) {
+        _query.value = text.take(60)
+    }
+}

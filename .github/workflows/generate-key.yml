@@ -1,0 +1,39 @@
+name: Generate Release Keystore
+
+# One-time helper. Before running it, add a repository secret KEYSTORE_PASSWORD
+# (Settings -> Secrets and variables -> Actions). The keystore is uploaded as a
+# short-lived workflow artifact (NOT printed to the public log). Download it, then:
+#   base64 -w 0 samonline.jks   -> save as secret KEYSTORE_BASE64
+#   KEY_ALIAS = samonline, KEY_PASSWORD = same as KEYSTORE_PASSWORD
+# and delete the artifact afterwards. Keep a private backup of the .jks: without
+# it you can't ship updates that install over the existing app.
+
+on: workflow_dispatch
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check password secret
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Add the KEYSTORE_PASSWORD repository secret first."
+            exit 1
+          fi
+
+      - name: Generate keystore
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          keytool -genkeypair -v -keystore samonline.jks -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias samonline -storepass "$KEYSTORE_PASSWORD" -keypass "$KEYSTORE_PASSWORD" \
+            -dname "CN=SAM Online TV, OU=App, O=shaonirfan, L=Dhaka, S=Dhaka, C=BD"
+
+      - name: Upload keystore (expires in 1 day)
+        uses: actions/upload-artifact@v4
+        with:
+          name: samonline-keystore
+          path: samonline.jks
+          retention-days: 1
