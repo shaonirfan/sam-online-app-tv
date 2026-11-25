@@ -25,7 +25,11 @@ git clone https://github.com/shaonirfan/sam-online-app-tv && cd sam-online-app-t
 ./run_test.sh 192.168.1.221                  # latest GitHub release, full test (~4 min)
 ./run_test.sh 192.168.1.221 --apk my.apk     # a local build instead
 ./run_test.sh 192.168.1.221 --no-install     # test what's already installed
+./run_test.sh 192.168.1.221 --push           # also publish the report + screenshots (see below)
 ```
+
+Optional, for smaller screenshots when publishing: `sudo apt install -y python3-pil`. ImageMagick
+or ffmpeg also work. Without any of them, the original PNGs are pushed.
 
 Results go to `results/<timestamp>/` (also packed as `results/<timestamp>.tar.gz`):
 
@@ -41,6 +45,22 @@ Exit code: `0` = all checks passed, `1` = a check failed, `2` = couldn't connect
 Note: player screenshots are often black even while video plays. Many TV chips (Amlogic, for example)
 draw video on a hardware layer that `screencap` can't capture. Use the decoder line in `summary.txt`
 and the absence of player errors instead.
+
+## Publishing reports (`--push`)
+
+With `--push`, the script publishes each run to the **`test-reports`** branch, not `main`. Pushing to
+`main` would trigger a new build and release every time. Each run adds `reports/<timestamp>/` with:
+
+- `REPORT.md`: version, device, the PASS/FAIL summary and every screenshot inline. It renders on GitHub.
+- The screenshots as 960×540 JPEGs (~640 KB per run in total).
+- `summary.txt`, `logcat.txt.gz`, `crash.txt`, `app_errors.txt`, `01_device_info.txt`, `02_install.txt`.
+
+The branch's `README.md` lists every run, newest first, with version and result:
+https://github.com/shaonirfan/sam-online-app-tv/tree/test-reports
+
+The script uses a separate git worktree (`.test-reports/`, ignored by git), so your checkout of `main` is
+never touched. The machine needs push access to the repo (an SSH key, or an HTTPS token in git's
+credential helper).
 
 ## Driving the TV by hand
 
