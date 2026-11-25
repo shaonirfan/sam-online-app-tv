@@ -1,0 +1,5 @@
+results/
+*.apk
+platform-tools/
+platform-tools.zip
+tv_ip.txt

@@ -85,6 +85,12 @@ To sign releases with your own key, run **Generate Release Keystore** once. Foll
 top of `generate-key.yml`, then add the secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`
 (`samonline`) and `KEY_PASSWORD`. Until then, release APKs are signed with the debug key.
 
+### Testing on a real TV
+
+`tools/tv-test/` has `run_test.sh` (Raspberry Pi / Linux / macOS) and `run_test.bat` (Windows). Each
+installs the latest release on an Android TV over network adb, drives the app with remote key presses,
+and saves screenshots, logcat and a PASS/FAIL summary. See [tools/tv-test/README.md](tools/tv-test/README.md).
+
 ### Testing the scraper without the BDIX network
 
 `tools/make_fakeflix.py` builds a fake DHAKA-FLIX tree. It includes an h5ai-style page, year folders,
