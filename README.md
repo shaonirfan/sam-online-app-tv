@@ -22,6 +22,12 @@ Jetpack Compose for TV. It is a 10-foot, D-pad-only rebuild of [BeeGear](https:/
   ◀/▶ seek 10 s (hold to scrub 30 s → 60 s steps), seek bar, subtitle / audio / speed dialogs,
   `.srt` / `.vtt` / `.ass` subtitles auto-loaded from the video's folder (or a `Subs` sub-folder),
   Next Episode + 10 s up-next countdown, resume per URL, and media-key support.
+- **Online subtitles** (OpenSubtitles.com): the player's Subtitles menu has "Search online (English)".
+  It matches the exact file by its fingerprint first (read with two small Range requests), then by
+  title + year or SxxEyy. Pick one and it's downloaded, attached at the current position, and cached
+  for that video. "Subtitle sync" moves it ±0.5 to 2 s. Log in under Settings → Subtitles account for
+  20 downloads a day (5 without). Needs the `OPENSUBTITLES_API_KEY` repository secret at build time,
+  and normal internet on the TV.
 - **Downloads**: BeeGear's single-active queue with HTTP Range resume and auto-resume after
   connection drops. Files are saved to `Movies/SAM Online TV`.
 - **Saved on the device**: watch positions, Continue Watching, My List, the search index, folder→poster

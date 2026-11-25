@@ -33,9 +33,19 @@ class MainActivity : ComponentActivity() {
     /** A pending `--es open <target>` test request (see TestHooks). */
     private val openRequest = mutableStateOf<String?>(null)
 
+    /** `--es os_user/os_pass`: set the OpenSubtitles login without typing it with the remote. */
+    private fun applyAccountExtras(intent: Intent?) {
+        val user = intent?.getStringExtra("os_user") ?: return
+        container.settings.openSubtitlesUser = user
+        intent.getStringExtra("os_pass")?.let { container.settings.openSubtitlesPassword = it }
+        container.onlineSubtitles.logout()
+        TestLog.mark("os_account", "set" to user.isNotBlank())
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        applyAccountExtras(intent)
         intent.getStringExtra("open")?.let { openRequest.value = it }
     }
 
@@ -46,6 +56,7 @@ class MainActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
+        applyAccountExtras(intent)
         openRequest.value = intent?.getStringExtra("open")
         setContent {
             val nav = rememberNavController()
@@ -83,13 +94,14 @@ class MainActivity : ComponentActivity() {
                 true
             }
             "category" -> Servers.byId(arg)?.let { nav.navigate(Routes.folder(it.url, it.name, null)); true } ?: false
-            "title", "play" -> {
+            "title", "play", "subs" -> {
                 val category = Servers.byId(arg)
                 val item = category?.let { container.catalog.categoryRow(it).getOrNull(index) }
                 when {
                     item == null -> false
                     kind == "title" -> { nav.openItem(item); true }
                     else -> container.playback.resolve(item).getOrNull()
+                        ?.also { if (kind == "subs") TestHooks.pendingOnlineSubtitleSearch = true }
                         ?.let { nav.play(it.queue, it.index, it.positionMs); true } ?: false
                 }
             }

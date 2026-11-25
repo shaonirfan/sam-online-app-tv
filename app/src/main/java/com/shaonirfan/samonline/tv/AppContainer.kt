@@ -6,7 +6,9 @@ import com.shaonirfan.samonline.tv.data.local.JsonFileStore
 import com.shaonirfan.samonline.tv.data.local.LibraryStore
 import com.shaonirfan.samonline.tv.data.local.PosterStore
 import com.shaonirfan.samonline.tv.data.local.SettingsStore
+import com.shaonirfan.samonline.tv.data.remote.OpenSubtitlesClient
 import com.shaonirfan.samonline.tv.data.repository.CatalogRepository
+import com.shaonirfan.samonline.tv.data.repository.OnlineSubtitleRepository
 import com.shaonirfan.samonline.tv.data.repository.PlaybackResolver
 import com.shaonirfan.samonline.tv.data.repository.SearchRepository
 
@@ -21,4 +23,15 @@ class AppContainer(context: Context) {
     val search = SearchRepository(JsonFileStore(app, "search_index.json"), posters)
     val downloads = DownloadManager(app)
     val playback = PlaybackResolver(catalog, library)
+    val onlineSubtitles = OnlineSubtitleRepository(
+        client = OpenSubtitlesClient(BuildConfig.OPENSUBTITLES_API_KEY, USER_AGENT),
+        settings = settings,
+        dir = java.io.File(app.filesDir, "online_subs"),
+        userAgent = USER_AGENT,
+    )
+
+    companion object {
+        /** OpenSubtitles asks for "AppName vX.Y" (the consumer name). */
+        val USER_AGENT = "SAMOnlineTV v${BuildConfig.VERSION_NAME}"
+    }
 }

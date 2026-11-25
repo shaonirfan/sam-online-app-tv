@@ -10,6 +10,7 @@
 #                                               # wipes My List / watch progress on the TV)
 #   ./run_test.sh 192.168.1.221 --push          # also publish report + screenshots to the
 #                                               # 'test-reports' branch (needs git push access)
+#   ./run_test.sh 192.168.1.221 --os-user NAME --os-pass PASS   # store the OpenSubtitles login on the TV
 #   TV_IP=192.168.1.221 ./run_test.sh
 #
 # Output: results/<timestamp>/ with screenshots (NN_name.png), logcat.txt, crash.txt,
@@ -27,18 +28,22 @@ APK=""
 INSTALL=1
 PUSH=0
 COLD=0
+OS_USER=""
+OS_PASS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --apk) APK="$2"; shift 2 ;;
     --no-install) INSTALL=0; shift ;;
     --push) PUSH=1; shift ;;
     --cold) COLD=1; shift ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    --os-user) OS_USER="$2"; shift 2 ;;
+    --os-pass) OS_PASS="$2"; shift 2 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) TV_IP="$1"; shift ;;
   esac
 done
 if [ -z "$TV_IP" ]; then
-  echo "Usage: $0 <tv-ip> [--apk file.apk] [--no-install] [--cold] [--push]"; exit 2
+  echo "Usage: $0 <tv-ip> [--apk file.apk] [--no-install] [--cold] [--push] [--os-user U --os-pass P]"; exit 2
 fi
 DEV="${TV_IP}:5555"
 
@@ -148,6 +153,10 @@ A logcat -c
 MARK_BASE=0
 A shell am start -W -n "$ACTIVITY" > "$OUT/03_launch.txt" 2>&1
 log "App launched - running the test session (~5-8 min). Don't touch the remote."
+if [ -n "$OS_USER" ]; then
+  A shell am start -n "$ACTIVITY" --es os_user "$OS_USER" --es os_pass "$OS_PASS" > /dev/null 2>&1
+  log "OpenSubtitles login stored on the TV for $OS_USER"
+fi
 
 # 1. Home: time to first row and to all rows
 if m=$(wait_mark '^home_row ' 120); then
@@ -231,6 +240,21 @@ else
   m2=$(marks | grep '^player_error' | tail -1)
   fail "player did not start ${m2:+($m2)}"; shot 10_player
 fi
+
+# 7. Online subtitles: search only (doesn't use any of the daily downloads)
+open_target subs:imdb250:0
+if m=$(wait_mark '^online_search(_error)? ' 90); then
+  case "$m" in
+    online_search_error*) msg=$(field "$m" message)
+      case "$msg" in *"not set up"*|*"no API key"*) warn "online subtitles disabled in this build (no OPENSUBTITLES_API_KEY secret)";;
+                     *) fail "online subtitle search failed: $msg";; esac ;;
+    *) n=$(field "$m" count); hm=$(field "$m" hash_matches)
+      if [ "${n:-0}" -gt 0 ]; then pass "online subtitles: $n English results ($hm exact file matches), top: $(field "$m" top)"
+      else warn "online subtitle search found nothing for this title"; fi ;;
+  esac
+else fail "online subtitle search did not run (player not ready?)"; fi
+shot 14_online_subtitles 2
+key BACK; key BACK; key BACK
 
 # ---------------------------------------------------------------- logs + checks
 marks > "$OUT/testlog.txt"

@@ -29,6 +29,9 @@ object TestLog {
  *                             south, series, anime, korean, animation)
  *   title:<categoryId>:<n>    details page of the n-th title (0-based) in that category's Home row
  *   play:<categoryId>:<n>     start playing that title (resume point / first episode)
+ *   subs:<categoryId>:<n>     play it and run an online (OpenSubtitles) subtitle search
+ *
+ * Extras `--es os_user <name> --es os_pass <password>` store the OpenSubtitles login.
  *
  * Navigation only; nothing here changes data, so it is safe to leave in release builds.
  */
@@ -36,4 +39,8 @@ object TestHooks {
     /** A query the Search screen should start with (consumed once). */
     @Volatile
     var pendingSearch: String? = null
+
+    /** `subs:<categoryId>:<n>`: play the title, then open "Search online (English)" by itself. */
+    @Volatile
+    var pendingOnlineSubtitleSearch: Boolean = false
 }

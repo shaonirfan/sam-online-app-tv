@@ -36,6 +36,15 @@ class SettingsStore(context: Context) {
             .apply()
     }
 
+    /** OpenSubtitles.com account (raises online subtitle downloads from 5 to 20 a day). */
+    var openSubtitlesUser: String
+        get() = prefs.getString("os_user", "").orEmpty()
+        set(value) = prefs.edit().putString("os_user", value.trim()).apply()
+
+    var openSubtitlesPassword: String
+        get() = prefs.getString("os_pass", "").orEmpty()
+        set(value) = prefs.edit().putString("os_pass", value).apply()
+
     /** Last chosen playback speed / subtitle language survive between sessions. */
     var playbackSpeed: Float
         get() = prefs.getFloat("speed", 1f)

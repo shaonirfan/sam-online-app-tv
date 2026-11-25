@@ -28,6 +28,7 @@ git clone https://github.com/shaonirfan/sam-online-app-tv && cd sam-online-app-t
 ./run_test.sh 192.168.1.221 --cold           # clear app data first (fresh-install timing;
                                              # wipes My List / watch progress on the TV)
 ./run_test.sh 192.168.1.221 --push           # also publish the report + screenshots (see below)
+./run_test.sh 192.168.1.221 --os-user NAME --os-pass PASS   # save the OpenSubtitles login on the TV
 ```
 
 Optional, for smaller screenshots when publishing: `sudo apt install -y python3-pil`. ImageMagick
@@ -54,6 +55,7 @@ The script doesn't press keys blindly. It opens each screen through the app's te
 | Categories | `category:series`, then OK | grid opens, first group opens |
 | Search | `search:friends`, `search:fri` | *Friends* (TV) is the first result; "fri" has suggestions |
 | Player | `play:imdb250:0`, then ▶▶▶ | player ready, position advancing, seek moves forward |
+| Online subtitles | `subs:imdb250:0` | OpenSubtitles search returns English results (search only, so no download quota used) |
 
 It finishes with crash, ANR and player-error checks. Other entry points: `home`, `category:<id>`,
 `title:<id>:<n>`, `play:<id>:<n>`, `search:<text>`. Category ids: english, english1080, imdb250,

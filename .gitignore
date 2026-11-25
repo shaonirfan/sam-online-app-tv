@@ -11,3 +11,4 @@ captures/
 .kotlin/
 .test-reports/
 !app/debug.keystore
+tools/.mock_video.bin

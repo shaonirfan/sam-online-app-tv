@@ -12,8 +12,13 @@ android {
         applicationId = "com.shaonirfan.samonline.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
+
+        // OpenSubtitles consumer key: injected by CI from the OPENSUBTITLES_API_KEY repository
+        // secret (never committed). Empty in local builds = online subtitle search disabled.
+        val osKey = (System.getenv("OPENSUBTITLES_API_KEY") ?: "").filter { it.isLetterOrDigit() }
+        buildConfigField("String", "OPENSUBTITLES_API_KEY", "\"$osKey\"")
     }
 
     // Release signing is optional: it is only configured when the keystore and

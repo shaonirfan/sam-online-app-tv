@@ -76,6 +76,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.shaonirfan.samonline.tv.TestHooks
 import com.shaonirfan.samonline.tv.ui.components.LocalAppContainer
 import com.shaonirfan.samonline.tv.ui.components.PrimaryActionButton
 import com.shaonirfan.samonline.tv.ui.components.SecondaryActionButton
@@ -86,7 +87,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private enum class PlayerDialog { NONE, SUBTITLES, AUDIO, SPEED }
+private enum class PlayerDialog { NONE, SUBTITLES, AUDIO, SPEED, ONLINE, SYNC }
 
 private val speeds = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
@@ -336,11 +337,34 @@ fun PlayerScreen(onExit: () -> Unit) {
         }
 
         when (dialog) {
-            PlayerDialog.SUBTITLES -> TrackDialog(
-                title = "Subtitles",
-                options = remember(dialog) { controller.textOptions() }.map { it.label to it.selected },
-                onSelect = { i -> controller.selectText(controller.textOptions()[i]); dialog = PlayerDialog.NONE },
-                onDismiss = { dialog = PlayerDialog.NONE },
+            PlayerDialog.SUBTITLES -> {
+                val tracks = remember(dialog) { controller.textOptions() }
+                val extras = buildList {
+                    if (container.onlineSubtitles.isConfigured) add("Search online (English)…" to false)
+                    if (controller.hasOnlineSubtitle) add("Subtitle sync…" to false)
+                }
+                TrackDialog(
+                    title = "Subtitles",
+                    options = tracks.map { it.label to it.selected } + extras,
+                    onSelect = { i ->
+                        when (extras.getOrNull(i - tracks.size)?.first) {
+                            null -> { controller.selectText(controller.textOptions()[i]); dialog = PlayerDialog.NONE }
+                            "Subtitle sync…" -> dialog = PlayerDialog.SYNC
+                            else -> dialog = PlayerDialog.ONLINE
+                        }
+                    },
+                    onDismiss = { dialog = PlayerDialog.NONE },
+                )
+            }
+            PlayerDialog.ONLINE -> OnlineSubtitleDialog(
+                controller = controller,
+                repo = container.onlineSubtitles,
+                onDone = { dialog = PlayerDialog.NONE },
+            )
+            PlayerDialog.SYNC -> SubtitleSyncDialog(
+                controller = controller,
+                repo = container.onlineSubtitles,
+                onDone = { dialog = PlayerDialog.NONE },
             )
             PlayerDialog.AUDIO -> TrackDialog(
                 title = "Audio",
@@ -355,6 +379,14 @@ fun PlayerScreen(onExit: () -> Unit) {
                 onDismiss = { dialog = PlayerDialog.NONE },
             )
             PlayerDialog.NONE -> Unit
+        }
+    }
+
+    // Test hook (subs:<cat>:<n>): once playing, open "Search online (English)" by itself.
+    LaunchedEffect(controller.isPlaying) {
+        if (controller.isPlaying && TestHooks.pendingOnlineSubtitleSearch) {
+            TestHooks.pendingOnlineSubtitleSearch = false
+            dialog = PlayerDialog.ONLINE
         }
     }
 

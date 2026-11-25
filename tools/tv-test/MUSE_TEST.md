@@ -16,6 +16,8 @@
    - What these screenshots show: `02_home_ready`, `03_title_page`, `04_series_page`,
      `05_series_episodes`, `08_search_friends`, `09_search_fri`, `12_player_controls`.
      Check that the title page shows the title at the top (not scrolled away).
+   - v1.0.4 adds online subtitles. The script's `subs:` step searches OpenSubtitles (search only,
+     no download). Screenshot `14_online_subtitles` should show a list of English subtitles.
    - The script now checks these itself (v1.0.3+): no rank prefix, MB/GB sizes, the series page with
      episodes, *Friends* first, "fri" suggestions, and playback + seek. Report any WARN/FAIL lines.
    - Updates should now install over the previous version. This is the last time a clean reinstall

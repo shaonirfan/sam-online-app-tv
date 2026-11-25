@@ -24,6 +24,7 @@ import com.shaonirfan.samonline.tv.AppContainer
 import com.shaonirfan.samonline.tv.TestLog
 import com.shaonirfan.samonline.tv.data.model.WatchProgress
 import com.shaonirfan.samonline.tv.data.remote.SubtitleFinder
+import com.shaonirfan.samonline.tv.data.remote.SubtitleSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -192,23 +193,68 @@ class PlayerController(
         loadJob?.cancel()
         loadJob = scope.launch {
             // Side-load matching .srt / .vtt files from the video's folder (4 s budget).
-            val subs = if (item.url.startsWith("http")) SubtitleFinder.find(item.url) else emptyList()
-            val mediaItem = MediaItem.Builder()
-                .setUri(Uri.parse(item.url))
-                .setMediaMetadata(MediaMetadata.Builder().setTitle(item.title).setArtist(item.seriesTitle).build())
-                .setSubtitleConfigurations(subs.map {
+            folderSubs = if (item.url.startsWith("http")) SubtitleFinder.find(item.url) else emptyList()
+            prepare(item, startPositionMs)
+        }
+    }
+
+    /** Folder subtitles found for the current video (kept so an online subtitle can be added later). */
+    private var folderSubs: List<SubtitleSource> = emptyList()
+
+    private fun prepare(item: PlayItem, positionMs: Long, playWhenReady: Boolean = true) {
+        val online = container.onlineSubtitles.cached(item.url)
+        hasOnlineSubtitle = online != null
+        val configs = buildList {
+            // A subtitle downloaded from OpenSubtitles for this video comes first and is the default.
+            online?.let {
+                add(
+                    MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(it))
+                        .setId("online")
+                        .setMimeType("application/x-subrip")
+                        .setLanguage("en")
+                        .setLabel("English (OpenSubtitles)")
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build()
+                )
+            }
+            folderSubs.forEach {
+                add(
                     MediaItem.SubtitleConfiguration.Builder(Uri.parse(it.url))
                         .setMimeType(it.mimeType)
                         .setLanguage(it.language)
                         .setLabel(it.label)
-                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .setSelectionFlags(if (online == null) C.SELECTION_FLAG_DEFAULT else 0)
                         .build()
-                })
-                .build()
-            player.setMediaItem(mediaItem, startPositionMs)
-            player.prepare()
-            player.playWhenReady = true
+                )
+            }
         }
+        val mediaItem = MediaItem.Builder()
+            .setUri(Uri.parse(item.url))
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(item.title).setArtist(item.seriesTitle).build())
+            .setSubtitleConfigurations(configs)
+            .build()
+        player.setMediaItem(mediaItem, positionMs)
+        player.prepare()
+        player.playWhenReady = playWhenReady
+    }
+
+    var hasOnlineSubtitle by mutableStateOf(false)
+        private set
+
+    /**
+     * Re-prepares the current video with the newly downloaded online subtitle selected,
+     * at the same position (a 1-2 s rebuffer).
+     */
+    fun attachOnlineSubtitle() {
+        val item = current ?: return
+        val pos = player.currentPosition.coerceAtLeast(0L)
+        val wasPlaying = player.playWhenReady
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .setPreferredTextLanguages("en")
+            .build()
+        prepare(item, pos, wasPlaying)
     }
 
     fun next() {
