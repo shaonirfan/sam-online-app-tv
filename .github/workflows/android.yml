@@ -68,13 +68,15 @@ jobs:
 
       - name: Create GitHub Release
         if: github.event_name != 'pull_request'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.version }}-${{ github.run_number }}
-          name: SAM Online TV v${{ steps.version.outputs.version }} (Build ${{ github.run_number }})
-          files: |
-            dist/SAM-Online-TV-v${{ steps.version.outputs.version }}.apk
-            dist/SAM-Online-TV.apk
-          body: |
-            Android TV build of SAM Online TV.
-            Install: sideload the APK on your Android TV / Google TV / TV box (needs a SAM Online BDIX connection).
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG="v${VERSION}-${{ github.run_number }}"
+          gh release create "$TAG" \
+            "dist/SAM-Online-TV-v${VERSION}.apk" \
+            "dist/SAM-Online-TV.apk" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "SAM Online TV v${VERSION} (Build ${{ github.run_number }})" \
+            --notes "Android TV build of SAM Online TV. Install: sideload the APK on your Android TV / Google TV / TV box (needs a SAM Online BDIX connection). Test it with tools/tv-test/run_test.sh."
