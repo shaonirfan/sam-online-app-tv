@@ -72,11 +72,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -u
           TAG="v${VERSION}-${{ github.run_number }}"
-          gh release create "$TAG" \
-            "dist/SAM-Online-TV-v${VERSION}.apk" \
-            "dist/SAM-Online-TV.apk" \
-            --repo "${{ github.repository }}" \
+          R="--repo ${{ github.repository }}"
+          # Draft first, upload with retries (GitHub's upload endpoint can be flaky),
+          # publish only once both APKs are attached - so /latest never has missing files.
+          gh release view "$TAG" $R >/dev/null 2>&1 || gh release create "$TAG" $R --draft \
             --target "${{ github.sha }}" \
             --title "SAM Online TV v${VERSION} (Build ${{ github.run_number }})" \
             --notes "Android TV build of SAM Online TV. Install: sideload the APK on your Android TV / Google TV / TV box (needs a SAM Online BDIX connection). Test it with tools/tv-test/run_test.sh."
+          ok=0
+          for i in 1 2 3 4 5 6; do
+            if gh release upload "$TAG" $R --clobber "dist/SAM-Online-TV-v${VERSION}.apk" "dist/SAM-Online-TV.apk"; then ok=1; break; fi
+            echo "Upload attempt $i failed, retrying in $((i * 20))s"; sleep $((i * 20))
+          done
+          [ "$ok" = 1 ] || { echo "::error::Could not upload the APKs (GitHub outage?). The APKs are in this run's artifacts."; exit 1; }
+          gh release edit "$TAG" $R --draft=false --latest
