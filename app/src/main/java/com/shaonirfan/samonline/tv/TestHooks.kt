@@ -10,12 +10,13 @@ import android.util.Log
  */
 object TestLog {
     const val TAG = "SamTvTest"
-    private val start = SystemClock.elapsedRealtime()
+    private val start = runCatching { SystemClock.elapsedRealtime() }.getOrDefault(0L)
 
     fun mark(event: String, vararg fields: Pair<String, Any?>) {
-        val t = SystemClock.elapsedRealtime() - start
+        val t = runCatching { SystemClock.elapsedRealtime() }.getOrDefault(0L) - start
         val body = fields.joinToString(" ") { (k, v) -> "$k=${v.toString().replace(' ', '_').take(120)}" }
-        Log.i(TAG, "$event t=$t $body".trim())
+        // runCatching: android.util.Log isn't available in plain JVM unit tests.
+        runCatching { Log.i(TAG, "$event t=$t $body".trim()) }
     }
 }
 
