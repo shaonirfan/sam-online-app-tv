@@ -12,6 +12,9 @@ import com.shaonirfan.samonline.tv.data.model.Season
 import com.shaonirfan.samonline.tv.data.remote.DirectoryScraper
 import com.shaonirfan.samonline.tv.data.remote.Servers
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -106,61 +109,67 @@ class CatalogRepository(
             items
         }
 
-    private suspend fun scanCategory(category: Category, limit: Int): List<MediaItem> {
-        val results = mutableListOf<MediaItem>()
-        val seen = HashSet<String>()
+    private class Candidate(val url: String, val title: String, val poster: String?, val score: Long)
+
+    /**
+     * Each top-level folder (year / A–Z group) is crawled in parallel (the scraper's
+     * 8-connection limit still applies), then the newest titles across all of them win.
+     */
+    private suspend fun scanCategory(category: Category, limit: Int): List<MediaItem> = coroutineScope {
         val top = DirectoryScraper.list(category.url, 15_000).getOrNull().orEmpty()
-
-        fun add(entry: RemoteEntry, url: String, title: String, poster: String?, score: Long) {
-            if (results.size < limit && seen.add(url)) {
-                if (poster != null) posters.put(url, poster)
-                results += MediaItem(title, url, poster ?: posters.get(url), category.name, score = score)
-            }
-        }
-
         val prioritized = top.filter { it.isFolder }
             .sortedWith(compareByDescending<RemoteEntry> { leadingYearRegex.containsMatchIn(it.name.trim()) }
                 .thenByDescending { freshness(it) })
-            .take(16)
+            .take(12)
 
-        for (folder in prioritized) {
-            if (results.size >= limit) break
-            val inside = DirectoryScraper.list(folder.url, 14_000).getOrNull().orEmpty()
-            val directPoster = DirectoryScraper.pickPoster(inside)
-            val insideMax = inside.maxOfOrNull { it.lastModifiedMs } ?: 0L
-
-            if (inside.any { it.isVideo } || (category.isSeries && hasSeasonStructure(inside))) {
-                add(folder, folder.url, folder.name, directPoster, freshness(folder, insideMax))
-                continue
+        val perFolder = prioritized.map { folder -> async { scanTopFolder(category, folder, limit) } }.awaitAll()
+        val seen = HashSet<String>()
+        // Round-robin across folders so one huge folder can't crowd out the rest, newest first.
+        val merged = mutableListOf<Candidate>()
+        val iterators = perFolder.map { it.sortedByDescending { c -> c.score }.iterator() }
+        while (merged.size < limit && iterators.any { it.hasNext() }) {
+            for (it in iterators) if (it.hasNext() && merged.size < limit) {
+                val c = it.next()
+                if (seen.add(c.url)) merged += c
             }
+        }
+        merged.sortedByDescending { it.score }.map { c ->
+            if (c.poster != null) posters.put(c.url, c.poster)
+            MediaItem(c.title, c.url, c.poster ?: posters.get(c.url), category.name, score = c.score)
+        }
+    }
 
-            for (child in inside.filter { it.isFolder }.sortedByDescending { freshness(it) }.take(14)) {
-                if (results.size >= limit) break
+    private suspend fun scanTopFolder(category: Category, folder: RemoteEntry, limit: Int): List<Candidate> = coroutineScope {
+        val inside = DirectoryScraper.list(folder.url, 14_000).getOrNull().orEmpty()
+        val insideMax = inside.maxOfOrNull { it.lastModifiedMs } ?: 0L
+        if (inside.any { it.isVideo } || (category.isSeries && hasSeasonStructure(inside))) {
+            return@coroutineScope listOf(Candidate(folder.url, folder.name, DirectoryScraper.pickPoster(inside), freshness(folder, insideMax)))
+        }
+        val children = inside.filter { it.isFolder }.sortedByDescending { freshness(it) }.take(minOf(limit, 10))
+        children.map { child ->
+            async {
                 val childItems = DirectoryScraper.list(child.url, 13_000).getOrNull().orEmpty()
                 val childPoster = DirectoryScraper.pickPoster(childItems)
                 val childMax = maxOf(insideMax, childItems.maxOfOrNull { it.lastModifiedMs } ?: 0L)
-                val childHasSeasons = hasSeasonStructure(childItems)
-
-                if (childItems.any { it.isVideo } || childHasSeasons) {
-                    add(child, child.url, child.name, childPoster, freshness(child, childMax))
-                    continue
+                if (childItems.any { it.isVideo } || hasSeasonStructure(childItems)) {
+                    return@async listOf(Candidate(child.url, child.name, childPoster, freshness(child, childMax)))
                 }
-
-                for (deep in childItems.filter { it.isFolder }.sortedByDescending { freshness(it) }.take(8)) {
-                    if (results.size >= limit) break
+                // One more level: group -> title -> (season | files)
+                val out = mutableListOf<Candidate>()
+                for (deep in childItems.filter { it.isFolder }.sortedByDescending { freshness(it) }.take(6)) {
                     val deepItems = DirectoryScraper.list(deep.url, 12_000).getOrNull().orEmpty()
                     if (deepItems.none { it.isVideo }) continue
                     val deepPoster = DirectoryScraper.pickPoster(deepItems) ?: childPoster
                     val deepMax = maxOf(childMax, deepItems.maxOfOrNull { it.lastModifiedMs } ?: 0L)
                     if (isSeasonName(deep.name)) {
-                        add(child, child.url, child.name, childPoster ?: deepPoster, freshness(deep, deepMax))
+                        out += Candidate(child.url, child.name, childPoster ?: deepPoster, freshness(deep, deepMax))
                         break
                     }
-                    add(deep, deep.url, deep.name, deepPoster, freshness(deep, deepMax))
+                    out += Candidate(deep.url, deep.name, deepPoster, freshness(deep, deepMax))
                 }
+                out
             }
-        }
-        return results.sortedByDescending { it.score }
+        }.awaitAll().flatten()
     }
 
     private fun freshness(entry: RemoteEntry, nestedMax: Long = 0L): Long {

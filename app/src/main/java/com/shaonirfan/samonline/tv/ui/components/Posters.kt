@@ -113,6 +113,7 @@ fun PosterCard(
     width: Dp = Dimens.PosterWidth,
     progress: Float? = null,
     showTitle: Boolean = true,
+    caption: String? = null,
     onFocused: (MediaItem) -> Unit = {},
 ) {
     val poster = rememberPoster(item.url, item.poster)
@@ -160,6 +161,16 @@ fun PosterCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 10.dp, start = 2.dp, end = 2.dp),
             )
+            if (caption != null) {
+                Text(
+                    text = caption,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SamColors.TextMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 2.dp, end = 2.dp),
+                )
+            }
         }
     }
 }

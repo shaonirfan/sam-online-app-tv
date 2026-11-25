@@ -195,6 +195,7 @@ fun SearchScreen(nav: NavController) {
                                 PosterCard(
                                     item = item,
                                     width = 130.dp,
+                                    caption = item.subtitle + (item.year?.let { " · $it" } ?: ""),
                                     onClick = { nav.openItem(item) },
                                     modifier = Modifier.rememberFocus(focus, "r|" + item.url),
                                 )

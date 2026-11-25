@@ -16,6 +16,8 @@ import androidx.compose.runtime.remember
 class PivotBringIntoViewSpec(private val parentFraction: Float) : BringIntoViewSpec {
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
         val leadingEdge = containerSize * parentFraction
+        // Already fully visible in the upper part of the screen: don't move (keeps page headers in view).
+        if (offset >= 0f && offset + size <= containerSize * 0.85f) return 0f
         if (size >= containerSize - leadingEdge) return offset // too tall: align its top
         return offset - leadingEdge
     }

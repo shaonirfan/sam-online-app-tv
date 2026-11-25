@@ -156,6 +156,13 @@ object DirectoryScraper {
 
     private fun parseSize(rowText: String): String {
         val m = sizeRegex.findAll(rowText).lastOrNull() ?: return ""
-        return "${m.groupValues[1]} ${m.groupValues[2].uppercase()}B"
+        val value = m.groupValues[1].toDoubleOrNull() ?: return ""
+        val power = "KMGT".indexOf(m.groupValues[2].uppercase()) + 1
+        val bytes = value * Math.pow(1024.0, power.toDouble())
+        return when {
+            bytes >= 1024.0 * 1024 * 1024 -> String.format(java.util.Locale.US, "%.2f GB", bytes / (1024.0 * 1024 * 1024))
+            bytes >= 1024.0 * 1024 -> String.format(java.util.Locale.US, "%.0f MB", bytes / (1024.0 * 1024))
+            else -> String.format(java.util.Locale.US, "%.0f KB", bytes / 1024.0)
+        }
     }
 }

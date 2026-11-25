@@ -58,6 +58,7 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/SAM-Online-TV-v${{ steps.version.outputs.version }}.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "dist/SAM-Online-TV-v${{ steps.version.outputs.version }}-debug.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/SAM-Online-TV.apk"
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
@@ -71,7 +72,9 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}-${{ github.run_number }}
           name: SAM Online TV v${{ steps.version.outputs.version }} (Build ${{ github.run_number }})
-          files: dist/SAM-Online-TV-v${{ steps.version.outputs.version }}.apk
+          files: |
+            dist/SAM-Online-TV-v${{ steps.version.outputs.version }}.apk
+            dist/SAM-Online-TV.apk
           body: |
             Android TV build of SAM Online TV.
             Install: sideload the APK on your Android TV / Google TV / TV box (needs a SAM Online BDIX connection).

@@ -134,5 +134,7 @@ class FakeServerTest {
         assertEquals("Breaking Bad", NameCleaner.displayTitle("Breaking Bad (TV Series 2008–2013) 720p"))
         assertEquals("2024", NameCleaner.year("Dune Part Two (2024) 1080p"))
         assertEquals("S02 · E05", NameCleaner.episodeLabel("Show.S02E05.mkv", 1))
+        assertEquals("Oppenheimer", NameCleaner.displayTitle("089. Oppenheimer (2023) 1080p"))
+        assertEquals("1923", NameCleaner.displayTitle("1923 (TV Series 2022– ) 1080p"))
     }
 }

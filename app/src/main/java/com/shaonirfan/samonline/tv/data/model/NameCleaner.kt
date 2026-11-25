@@ -20,6 +20,8 @@ object NameCleaner {
     fun displayTitle(raw: String): String {
         var s = decode(raw).trim().trimEnd('/')
         if (looksLikeFile(s)) s = s.substringBeforeLast('.')
+        // IMDb Top-250 folders are numbered: "089. Oppenheimer (2023)".
+        s = s.replace(Regex("""^\s*\d{1,3}\s*[.)\-]\s+"""), "")
         s = s.replace('_', ' ').replace(Regex("""(?<=\w)\.(?=\w)"""), " ")
         s = qualityTokens.replace(s, "")
         // Drop the year and anything after it ("Movie Name 2023 1080p" -> "Movie Name"),
