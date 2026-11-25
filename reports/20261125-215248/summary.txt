@@ -1,0 +1,21 @@
+PASS  connected to 192.168.1.221:5555
+INFO  device: Xiaomi MIBOX3 9
+PASS  TV reaches DHAKA-FLIX 172.16.50.7
+PASS  TV reaches DHAKA-FLIX 172.16.50.14
+PASS  TV reaches DHAKA-FLIX 172.16.50.12
+PASS  TV reaches DHAKA-FLIX 172.16.50.10
+PASS  install
+INFO  installed version: 1.0.2
+PASS  app still running at the end (pid 7102)
+PASS  no crashes
+PASS  no ANRs
+PASS  no player/runtime errors
+INFO  video decoder: MediaCodec: [OMX.amlogic.hevc.decoder.awesome]
+FAIL  screen 03_home_35s looks empty (45636 bytes)
+PASS  screen 07_title_page has content
+PASS  screen 16_search_friends has content
+PASS  screen 20_category_grid has content
+FAIL  screen 22_series_page looks empty (42341 bytes)
+
+Screens to eyeball: 03 home, 07 title page (title visible, sizes in MB/GB), 16 'friends' (Friends series first),
+17 'fri' suggestions row, 22 series page (seasons + episodes).

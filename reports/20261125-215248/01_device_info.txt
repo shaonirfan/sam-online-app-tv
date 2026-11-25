@@ -1,0 +1,7 @@
+ro.product.brand: Xiaomi
+ro.product.model: MIBOX3
+ro.build.version.release: 9
+ro.build.version.sdk: 28
+ro.product.cpu.abi: armeabi-v7a
+screen: Physical size: 1920x1080
+density: Physical density: 320

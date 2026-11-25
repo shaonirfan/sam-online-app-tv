@@ -1,0 +1,5 @@
+adb: failed to install results/20261125-215248/SAM-Online-TV.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package com.shaonirfan.samonline.tv signatures do not match previously installed version; ignoring!]
+Performing Streamed Install
+Success
+Performing Streamed Install
+Success
