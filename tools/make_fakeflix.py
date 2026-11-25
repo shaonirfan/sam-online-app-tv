@@ -29,4 +29,9 @@ f(f"{tv}/TV Series ★ A — L/Dark (2017)/Dark S01 1080p/Subs/Dark.S01E01.eng.s
 an = f"{root}/DHAKA-FLIX-10/Anime & Cartoon TV Series"
 for e in [1, 2, 10, 11, 3]:
     f(f"{an}/Frieren (2023)/Frieren - Episode {e}.mkv")
+for s_ in (1, 2):
+    for e in range(1, 3):
+        f(f"{tv}/TV Series ★ A — L/Friends (TV Series 1994–2004) 720p/Season {s_}/Friends.S0{s_}E0{e}.mkv")
+f(f"{em}/(2023) 1080p/Friendsgiving (2020)/Friendsgiving.2020.1080p.mkv")
+f(f"{em}/(2023) 1080p/Friends with Benefits (2011)/Friends.with.Benefits.2011.mkv")
 print("ok")

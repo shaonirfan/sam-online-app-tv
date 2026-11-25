@@ -72,7 +72,7 @@ class SearchRepository(
                 for (i in 0 until arr.length()) {
                     val it = arr.getJSONArray(i)
                     val title = it.getString(0)
-                    list += SearchIndexEntry(title, it.getString(1), it.getString(2), it.getInt(3) == 1, NameCleaner.normalizeForSearch(title))
+                    list += entry(title, it.getString(1), it.getString(2), it.getInt(3) == 1)
                 }
                 entries.clear()
                 entries.addAll(list)
@@ -119,10 +119,10 @@ class SearchRepository(
                     if (isGroup && depth < 2) {
                         children += e.url
                     } else {
-                        out += SearchIndexEntry(e.name, e.url, category.name, false, NameCleaner.normalizeForSearch(e.name))
+                        out += entry(e.name, e.url, category.name, false)
                     }
                 }
-                e.isVideo -> out += SearchIndexEntry(e.name, e.url, category.name, true, NameCleaner.normalizeForSearch(e.name))
+                e.isVideo -> out += entry(e.name, e.url, category.name, true)
                 else -> Unit
             }
         }
@@ -138,7 +138,22 @@ class SearchRepository(
         store.write(JSONObject().put("builtAt", System.currentTimeMillis()).put("items", arr).toString())
     }
 
-    suspend fun search(query: String, limit: Int = 120): List<MediaItem> = withContext(Dispatchers.Default) {
+    private fun entry(title: String, url: String, category: String, isVideo: Boolean) = SearchIndexEntry(
+        title = title,
+        url = url,
+        category = category,
+        isVideo = isVideo,
+        key = NameCleaner.normalizeForSearch(title),
+        titleKey = NameCleaner.normalizeForSearch(NameCleaner.displayTitle(title)),
+        isSeries = Servers.categories.firstOrNull { it.name == category }?.isSeries == true,
+    )
+
+    /**
+     * Ranks on the cleaned title, so "friends" puts the series *Friends* first, then
+     * whole-word matches ("Friends with Benefits"), then partial words ("Friendsgiving").
+     * Folders beat loose video files; ties go to the shorter title, then the newer year.
+     */
+    suspend fun search(query: String, limit: Int = 150): List<MediaItem> = withContext(Dispatchers.Default) {
         ensureLoaded()
         val q = NameCleaner.normalizeForSearch(query)
         if (q.isBlank()) return@withContext emptyList()
@@ -146,22 +161,48 @@ class SearchRepository(
         val snapshot = synchronized(entries) { entries.toList() }
         snapshot.asSequence()
             .mapNotNull { e ->
-                val score = when {
-                    e.key.startsWith(q) -> 0
-                    e.key.contains(" $q") -> 1
-                    e.key.contains(q) -> 2
-                    tokens.size > 1 && tokens.all { e.key.contains(it) } -> 3
+                val t = e.titleKey
+                val rank = when {
+                    t == q -> 0
+                    t.startsWith("$q ") -> 1
+                    t.contains(" $q ") || t.endsWith(" $q") -> 2
+                    t.startsWith(q) -> 3
+                    t.contains(" $q") -> 4
+                    t.contains(q) -> 5
+                    tokens.size > 1 && tokens.all { tok -> t.contains(tok) } -> 6
+                    e.key.contains(q) -> 7
+                    tokens.size > 1 && tokens.all { tok -> e.key.contains(tok) } -> 8
                     else -> return@mapNotNull null
                 }
-                (score + if (e.isVideo) 4 else 0) to e
+                Triple(rank + if (e.isVideo) 10 else 0, e, NameCleaner.year(e.title) ?: "")
             }
-            .sortedWith(compareBy<Pair<Int, SearchIndexEntry>> { it.first }.thenBy { it.second.key.length })
-            .distinctBy { NameCleaner.displayTitle(it.second.title).lowercase() + it.second.category }
+            .sortedWith(
+                compareBy<Triple<Int, SearchIndexEntry, String>> { it.first }
+                    .thenBy { it.second.titleKey.length }
+                    .thenByDescending { it.third }
+            )
+            .distinctBy { it.second.titleKey + "|" + it.second.category }
             .take(limit)
-            .map { (_, e) ->
+            .map { (_, e, _) ->
                 val posterKey = if (e.isVideo) DirectoryScraper.parentUrl(e.url) else e.url
-                MediaItem(e.title, e.url, posters.get(posterKey), e.category, isVideo = e.isVideo)
+                MediaItem(e.title, e.url, posters.get(posterKey), e.category, isVideo = e.isVideo, isSeries = e.isSeries)
             }
+            .toList()
+    }
+
+    /** Title suggestions for the typed prefix: titles whose words start with it, best first. */
+    fun suggestions(query: String, results: List<MediaItem>, limit: Int = 6): List<String> {
+        val q = NameCleaner.normalizeForSearch(query)
+        if (q.isBlank()) return emptyList()
+        return results.asSequence()
+            .filter { !it.isVideo }
+            .map { it.displayTitle }
+            .filter { t ->
+                val n = NameCleaner.normalizeForSearch(t)
+                n.startsWith(q) || n.contains(" $q")
+            }
+            .distinctBy { it.lowercase() }
+            .take(limit)
             .toList()
     }
 }

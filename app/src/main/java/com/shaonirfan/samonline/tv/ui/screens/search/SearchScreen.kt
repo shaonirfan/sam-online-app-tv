@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
@@ -51,6 +53,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.FilterChip
+import androidx.tv.material3.FilterChipDefaults
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -59,6 +67,7 @@ import com.shaonirfan.samonline.tv.R
 import com.shaonirfan.samonline.tv.ui.components.FocusMemory
 import com.shaonirfan.samonline.tv.ui.components.FocusRestoreEffect
 import com.shaonirfan.samonline.tv.ui.components.LocalAppContainer
+import com.shaonirfan.samonline.tv.ui.components.MinimalScrolling
 import com.shaonirfan.samonline.tv.ui.components.PivotScrolling
 import com.shaonirfan.samonline.tv.ui.components.PosterCard
 import com.shaonirfan.samonline.tv.ui.components.initialFocus
@@ -81,6 +90,8 @@ fun SearchScreen(nav: NavController) {
     val query by vm.query.collectAsStateWithLifecycle()
     val results by vm.results.collectAsStateWithLifecycle()
     val index by vm.indexState.collectAsStateWithLifecycle()
+    val filter by vm.filter.collectAsStateWithLifecycle()
+    val shown = results.filtered(filter)
     val context = LocalContext.current
     val focus = rememberFocusMemory("search")
 
@@ -182,7 +193,44 @@ fun SearchScreen(nav: NavController) {
                     else "No results for “$query”",
                     Modifier.align(Alignment.Center),
                 )
-                else -> PivotScrolling(0.08f) {
+                else -> Column(Modifier.fillMaxSize()) {
+                    if (results.suggestions.isNotEmpty()) {
+                        MinimalScrolling {
+                            LazyRow(
+                                contentPadding = PaddingValues(start = 16.dp, end = Dimens.SafeHorizontal, bottom = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.focusRestorer(),
+                            ) {
+                                lazyItems(results.suggestions, key = { it }) { suggestion ->
+                                    SuggestionRow(suggestion, query, focus) { vm.set(suggestion.lowercase()) }
+                                }
+                            }
+                        }
+                    }
+                    Row(
+                        Modifier.padding(start = 16.dp, bottom = 6.dp).focusRestorer(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        SearchFilter.entries.forEach { f ->
+                            FilterChip(
+                                selected = f == filter,
+                                onClick = { vm.setFilter(f) },
+                                modifier = Modifier.rememberFocus(focus, "filter|${f.name}"),
+                                colors = FilterChipDefaults.colors(
+                                    selectedContainerColor = SamColors.Accent,
+                                    selectedContentColor = Color.White,
+                                    focusedContainerColor = Color.White,
+                                    focusedContentColor = Color.Black,
+                                    focusedSelectedContainerColor = Color.White,
+                                    focusedSelectedContentColor = Color.Black,
+                                ),
+                            ) { Text("${f.label} (${results.count(f)})", style = MaterialTheme.typography.labelLarge) }
+                        }
+                    }
+                    if (shown.isEmpty()) {
+                        Hint("No ${filter.label.lowercase()} match “$query”", Modifier.padding(start = 16.dp))
+                    }
+                    PivotScrolling(0.08f) {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(4),
                         contentPadding = PaddingValues(start = 16.dp, end = Dimens.SafeHorizontal, top = 8.dp, bottom = 40.dp),
@@ -190,7 +238,7 @@ fun SearchScreen(nav: NavController) {
                         horizontalArrangement = Arrangement.spacedBy(18.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(results.items, key = { it.url }) { item ->
+                        items(shown, key = { it.url }) { item ->
                             Box(contentAlignment = Alignment.TopCenter) {
                                 PosterCard(
                                     item = item,
@@ -202,11 +250,43 @@ fun SearchScreen(nav: NavController) {
                             }
                         }
                     }
+                    }
                 }
             }
         }
     }
     FocusRestoreEffect(focus)
+}
+
+@Composable
+private fun SuggestionRow(text: String, query: String, focus: FocusMemory, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.height(40.dp).rememberFocus(focus, "sug|$text"),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = SamColors.Surface,
+            contentColor = SamColors.TextSecondary,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Color.Black,
+        ),
+    ) {
+        Row(Modifier.height(40.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            // Typed part normal, the completion bold (Netflix-style).
+            val cut = text.lowercase().indexOf(query.lowercase().trim()).takeIf { it >= 0 }
+            val annotated = buildAnnotatedString {
+                if (cut == null) append(text) else {
+                    val end = (cut + query.trim().length).coerceAtMost(text.length)
+                    append(text.substring(0, end))
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(text.substring(end)) }
+                }
+            }
+            Text(annotated, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
 @Composable

@@ -112,9 +112,9 @@ class FakeServerTest {
     @Test
     fun categoryRowsFindTitlesAcrossNestingLevels() = runBlocking {
         val movies = catalog.categoryRow(Servers.categories[0])
-        assertEquals(setOf("Dune Part Two", "Inside Out 2", "Kill Part 1", "Oppenheimer"), movies.map { it.displayTitle }.toSet())
+        assertTrue(movies.map { it.displayTitle }.containsAll(listOf("Dune Part Two", "Inside Out 2", "Kill Part 1", "Oppenheimer", "Friendsgiving")))
         val series = catalog.categoryRow(Servers.categories[1])
-        assertEquals(setOf("Breaking Bad", "Dark"), series.map { it.displayTitle }.toSet())
+        assertEquals(setOf("Breaking Bad", "Dark", "Friends"), series.map { it.displayTitle }.toSet())
     }
 
     @Test
@@ -126,6 +126,16 @@ class FakeServerTest {
         assertEquals("Dune Part Two", search.search("dune").first().displayTitle)
         assertTrue(search.search("breaking").any { it.displayTitle == "Breaking Bad" })
         assertTrue(search.search("part two").isNotEmpty())
+
+        // "friends" must put the series first, not Friendsgiving.
+        val friends = search.search("friends")
+        assertEquals("Friends", friends.first().displayTitle)
+        assertTrue(friends.first().isSeries)
+        assertEquals("Friends with Benefits", friends[1].displayTitle)
+        assertEquals("Friendsgiving", friends[2].displayTitle)
+        val sug = search.suggestions("fri", search.search("fri"))
+        assertTrue(sug.toString(), sug.containsAll(listOf("Friends", "Friends with Benefits", "Friendsgiving", "Frieren")))
+        assertEquals("Friends", search.suggestions("friends", search.search("friends")).first())
     }
 
     @Test

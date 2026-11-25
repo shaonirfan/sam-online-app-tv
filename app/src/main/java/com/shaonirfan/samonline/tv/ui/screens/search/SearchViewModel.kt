@@ -17,7 +17,21 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 
-data class SearchResults(val query: String = "", val items: List<MediaItem> = emptyList(), val searching: Boolean = false)
+enum class SearchFilter(val label: String) { ALL("All"), MOVIES("Movies"), SERIES("TV Shows") }
+
+data class SearchResults(
+    val query: String = "",
+    val items: List<MediaItem> = emptyList(),
+    val suggestions: List<String> = emptyList(),
+) {
+    fun filtered(filter: SearchFilter): List<MediaItem> = when (filter) {
+        SearchFilter.ALL -> items
+        SearchFilter.MOVIES -> items.filter { !it.isSeries }
+        SearchFilter.SERIES -> items.filter { it.isSeries }
+    }
+
+    fun count(filter: SearchFilter) = filtered(filter).size
+}
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class SearchViewModel(private val container: AppContainer) : ViewModel() {
@@ -26,6 +40,13 @@ class SearchViewModel(private val container: AppContainer) : ViewModel() {
     val query: StateFlow<String> = _query.asStateFlow()
 
     val indexState: StateFlow<IndexState> = container.search.state
+
+    private val _filter = MutableStateFlow(SearchFilter.ALL)
+    val filter: StateFlow<SearchFilter> = _filter.asStateFlow()
+
+    fun setFilter(f: SearchFilter) {
+        _filter.value = f
+    }
 
     /**
      * Debounced search over the local index. While the very first index is still being
@@ -36,7 +57,12 @@ class SearchViewModel(private val container: AppContainer) : ViewModel() {
         indexState.map { it.count / 500 to it.ready }.distinctUntilChanged(),
     ) { q, _ -> q }
         .mapLatest { q ->
-            if (q.isBlank()) SearchResults() else SearchResults(q, container.search.search(q))
+            if (q.isBlank()) {
+                SearchResults()
+            } else {
+                val items = container.search.search(q)
+                SearchResults(q, items, container.search.suggestions(q, items))
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchResults())
 

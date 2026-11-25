@@ -12,8 +12,8 @@ android {
         applicationId = "com.shaonirfan.samonline.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
     }
 
     // Release signing is optional: it is only configured when the keystore and

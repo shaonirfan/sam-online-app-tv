@@ -36,6 +36,8 @@ data class MediaItem(
     val subtitle: String = "",
     val isVideo: Boolean = false,
     val score: Long = 0L,
+    /** From a series category (TV & Web Series, Anime, Korean); used by the search filter. */
+    val isSeries: Boolean = false,
 ) {
     val displayTitle: String get() = NameCleaner.displayTitle(title)
     val year: String? get() = NameCleaner.year(title)
@@ -98,6 +100,9 @@ data class SearchIndexEntry(
     val url: String,
     val category: String,
     val isVideo: Boolean,
-    /** Pre-normalised lowercase text used for matching. */
+    /** Pre-normalised raw name (with year, quality...) for token matching. */
     val key: String,
+    /** Pre-normalised cleaned title ("friends") for ranking and suggestions. */
+    val titleKey: String,
+    val isSeries: Boolean,
 )
