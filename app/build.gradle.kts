@@ -12,8 +12,8 @@ android {
         applicationId = "com.shaonirfan.samonline.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.5"
 
         // OpenSubtitles consumer key: injected by CI from the OPENSUBTITLES_API_KEY repository
         // secret (never committed). Empty in local builds = online subtitle search disabled.

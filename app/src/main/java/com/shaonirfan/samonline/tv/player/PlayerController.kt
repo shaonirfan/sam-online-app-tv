@@ -294,26 +294,26 @@ class PlayerController(
     fun textOptions(): List<TrackOption> {
         val params = player.trackSelectionParameters
         val disabled = params.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
-        val options = mutableListOf(TrackOption("Off", disabled, null, -1))
+        val tracks = mutableListOf<TrackOption>()
         player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }.forEach { g ->
             for (i in 0 until g.length) {
                 if (!g.isTrackSupported(i)) continue
-                options += TrackOption(label(g.getTrackFormat(i), "Subtitle ${options.size}"), !disabled && g.isTrackSelected(i), g, i)
+                tracks += TrackOption(TrackLabels.subtitle(g.getTrackFormat(i)), !disabled && g.isTrackSelected(i), g, i)
             }
         }
-        return options
+        val labels = TrackLabels.disambiguate(tracks.map { it.label })
+        return listOf(TrackOption("Off", disabled, null, -1)) + tracks.mapIndexed { n, t -> t.copy(label = labels[n]) }
     }
 
-    fun audioOptions(): List<TrackOption> =
-        player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.flatMap { g ->
-            (0 until g.length).filter { g.isTrackSupported(it, true) }.mapIndexed { n, i ->
-                val f = g.getTrackFormat(i)
-                val channels = when (f.channelCount) {
-                    1 -> "Mono"; 2 -> "Stereo"; 6 -> "5.1"; 8 -> "7.1"; else -> null
-                }
-                TrackOption(listOfNotNull(label(f, "Audio ${n + 1}"), channels).joinToString(" · "), g.isTrackSelected(i), g, i)
+    fun audioOptions(): List<TrackOption> {
+        val tracks = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.flatMap { g ->
+            (0 until g.length).filter { g.isTrackSupported(it, true) }.map { i ->
+                TrackOption(TrackLabels.audio(g.getTrackFormat(i)), g.isTrackSelected(i), g, i)
             }
         }
+        val labels = TrackLabels.disambiguate(tracks.map { it.label })
+        return tracks.mapIndexed { n, t -> t.copy(label = labels[n]) }
+    }
 
     fun selectText(option: TrackOption) {
         val b = player.trackSelectionParameters.buildUpon()
@@ -331,13 +331,6 @@ class PlayerController(
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, option.index))
             .build()
-    }
-
-    private fun label(f: Format, fallback: String): String {
-        f.label?.takeIf { it.isNotBlank() }?.let { return it }
-        val lang = f.language?.takeIf { it.isNotBlank() && it != "und" }
-            ?.let { Locale.forLanguageTag(it).getDisplayLanguage(Locale.ENGLISH).ifBlank { it } }
-        return lang ?: fallback
     }
 
     // ------------------------------------------------------------------ progress
