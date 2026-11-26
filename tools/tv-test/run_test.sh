@@ -170,6 +170,14 @@ if m=$(wait_mark '^home_ready ' 240); then
 else fail "home: rows still loading after 240s"; fi
 shot 02_home_ready 3
 
+if m=$(marks | grep '^index_loaded ' | tail -1) && [ -n "$m" ]; then
+  ms=$(field "$m" ms); n=$(field "$m" titles)
+  if [ "${n:-0}" -gt 0 ]; then
+    if [ "${ms:-99999}" -le 3000 ]; then pass "saved search index loaded at start: $n titles in ${ms} ms"
+    else warn "saved search index slow to load: $n titles in ${ms} ms"; fi
+  else info "no saved search index yet (first run builds it)"; fi
+fi
+
 # 2. Movie title page (first IMDb Top 250 title)
 open_target title:imdb250:0
 if m=$(wait_mark '^details ' 40); then

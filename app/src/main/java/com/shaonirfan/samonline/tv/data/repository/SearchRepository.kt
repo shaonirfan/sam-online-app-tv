@@ -40,6 +40,8 @@ data class IndexState(
 class SearchRepository(
     private val store: JsonFileStore,
     private val posters: PosterStore,
+    /** The v1.0.0-1.0.5 JSON index; read once, then saved in the fast format. */
+    private val legacyStore: JsonFileStore? = null,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val entries: MutableList<SearchIndexEntry> = Collections.synchronizedList(mutableListOf())
@@ -60,10 +62,13 @@ class SearchRepository(
      */
     fun warmUp(delayMs: Long = 0L) {
         scope.launch {
-            if (delayMs > 0) kotlinx.coroutines.delay(delayMs)
+            // The saved index is loaded right away (fast, no network) so the first search is instant;
+            // only the refresh crawl waits, so the Home rows get the network first.
             ensureLoaded()
             val age = System.currentTimeMillis() - _state.value.builtAt
-            if (!_state.value.ready || age > 24L * 60 * 60 * 1000) rebuild()
+            if (_state.value.ready && age <= REFRESH_AFTER_MS) return@launch
+            if (delayMs > 0) kotlinx.coroutines.delay(delayMs)
+            rebuild()
         }
     }
 
@@ -71,21 +76,57 @@ class SearchRepository(
         if (loaded) return
         synchronized(this) {
             if (loaded) return
-            runCatching {
-                val o = JSONObject(store.read() ?: return@runCatching)
-                val arr = o.getJSONArray("items")
-                val list = ArrayList<SearchIndexEntry>(arr.length())
-                for (i in 0 until arr.length()) {
-                    val it = arr.getJSONArray(i)
-                    val title = it.getString(0)
-                    list += entry(title, it.getString(1), it.getString(2), it.getInt(3) == 1)
-                }
-                entries.clear()
-                entries.addAll(list)
-                _state.value = IndexState(ready = list.isNotEmpty(), count = list.size, builtAt = o.optLong("builtAt"))
+            val started = System.currentTimeMillis()
+            var list = runCatching { store.read()?.let(::parseTsv) }.getOrNull()
+            var builtAt = list?.second ?: 0L
+            val legacy = legacyStore
+            if (list == null && legacy != null) {
+                // One-time upgrade from the old JSON file (slower: titles are cleaned again).
+                list = runCatching { legacy.read()?.let(::parseLegacyJson) }.getOrNull()
+                builtAt = list?.second ?: 0L
+                list?.first?.takeIf { it.isNotEmpty() }?.let { persist(it, builtAt); legacy.delete() }
             }
+            val items = list?.first.orEmpty()
+            entries.clear()
+            entries.addAll(items)
+            _state.value = IndexState(ready = items.isNotEmpty(), count = items.size, builtAt = builtAt)
             loaded = true
+            com.shaonirfan.samonline.tv.TestLog.mark(
+                "index_loaded", "titles" to items.size, "ms" to System.currentTimeMillis() - started,
+                "age_h" to if (builtAt > 0) (System.currentTimeMillis() - builtAt) / 3_600_000 else -1,
+            )
         }
+    }
+
+    /**
+     * Index file: a header line "SAMIDX2\t<builtAt>", then one entry per line with every
+     * field pre-computed (raw title, url, category, isVideo, key, titleKey, isSeries), so
+     * loading is a plain split - no regex cleaning of ~30k titles on every app start.
+     */
+    private fun parseTsv(text: String): Pair<List<SearchIndexEntry>, Long>? {
+        val lines = text.lineSequence().iterator()
+        if (!lines.hasNext()) return null
+        val header = lines.next().split('\t')
+        if (header.firstOrNull() != TSV_MAGIC) return null
+        val builtAt = header.getOrNull(1)?.toLongOrNull() ?: 0L
+        val out = ArrayList<SearchIndexEntry>(40_000)
+        while (lines.hasNext()) {
+            val f = lines.next().split('\t')
+            if (f.size < 7) continue
+            out += SearchIndexEntry(f[0], f[1], f[2], f[3] == "1", f[4], f[5], f[6] == "1")
+        }
+        return out to builtAt
+    }
+
+    private fun parseLegacyJson(text: String): Pair<List<SearchIndexEntry>, Long> {
+        val o = JSONObject(text)
+        val arr = o.getJSONArray("items")
+        val list = ArrayList<SearchIndexEntry>(arr.length())
+        for (i in 0 until arr.length()) {
+            val it = arr.getJSONArray(i)
+            list += entry(it.getString(0), it.getString(1), it.getString(2), it.getInt(3) == 1)
+        }
+        return list to o.optLong("builtAt")
     }
 
     fun rebuild() {
@@ -142,10 +183,22 @@ class SearchRepository(
         }
     }
 
-    private fun persist(list: List<SearchIndexEntry>) {
-        val arr = JSONArray()
-        list.forEach { arr.put(JSONArray().put(it.title).put(it.url).put(it.category).put(if (it.isVideo) 1 else 0)) }
-        store.write(JSONObject().put("builtAt", System.currentTimeMillis()).put("items", arr).toString())
+    private fun persist(list: List<SearchIndexEntry>, builtAt: Long = System.currentTimeMillis()) {
+        fun clean(v: String) = v.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
+        val sb = StringBuilder(list.size * 160)
+        sb.append(TSV_MAGIC).append('\t').append(builtAt).append('\n')
+        list.forEach {
+            sb.append(clean(it.title)).append('\t').append(clean(it.url)).append('\t').append(clean(it.category)).append('\t')
+                .append(if (it.isVideo) '1' else '0').append('\t').append(clean(it.key)).append('\t')
+                .append(clean(it.titleKey)).append('\t').append(if (it.isSeries) '1' else '0').append('\n')
+        }
+        store.write(sb.toString())
+    }
+
+    companion object {
+        private const val TSV_MAGIC = "SAMIDX2"
+        /** The library index is refreshed in the background once it is a day old. */
+        private const val REFRESH_AFTER_MS = 24L * 60 * 60 * 1000
     }
 
     private fun entry(title: String, url: String, category: String, isVideo: Boolean) = SearchIndexEntry(

@@ -178,7 +178,7 @@ fun SearchScreen(nav: NavController) {
                     index.building && !index.ready -> "Indexing library… ${index.count} titles so far"
                     index.building -> "${index.count} titles · refreshing index…"
                     index.ready -> "${index.count} titles indexed"
-                    else -> "Preparing search index…"
+                    else -> "Loading saved index…"
                 },
                 style = MaterialTheme.typography.bodySmall, color = SamColors.TextMuted,
             )

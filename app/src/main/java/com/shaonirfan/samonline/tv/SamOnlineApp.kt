@@ -18,6 +18,7 @@ class SamOnlineApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // Loads the saved search index now; a refresh crawl (if it's over a day old) waits 60 s.
         container.search.warmUp(delayMs = 60_000)
     }
 

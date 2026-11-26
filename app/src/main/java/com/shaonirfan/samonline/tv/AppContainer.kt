@@ -20,7 +20,7 @@ class AppContainer(context: Context) {
     val library = LibraryStore(app)
     val settings = SettingsStore(app)
     val catalog = CatalogRepository(posters, JsonFileStore(app, "home_rows.json"))
-    val search = SearchRepository(JsonFileStore(app, "search_index.json"), posters)
+    val search = SearchRepository(JsonFileStore(app, "search_index_v2.tsv"), posters, legacyStore = JsonFileStore(app, "search_index.json"))
     val downloads = DownloadManager(app)
     val playback = PlaybackResolver(catalog, library)
     val onlineSubtitles = OnlineSubtitleRepository(
